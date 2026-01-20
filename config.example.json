@@ -32,5 +32,15 @@
     "dayOfWeek": "sunday",
     "time": "18:00",
     "recipients": ["person1@email.com"]
+  },
+  "failureAlerts": {
+    "immediate": true,
+    "dailySummary": true,
+    "dailySummaryTime": "18:00",
+    "weeklySummary": true,
+    "circuitBreaker": {
+      "consecutiveFailures": 5,
+      "waitHours": 24
+    }
   }
 }

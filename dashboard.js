@@ -48,6 +48,10 @@ class DashboardServer {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result));
         });
+      } else if (req.url === '/api/reload-config' && req.method === 'POST') {
+        const result = await this.reloadConfig();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -100,7 +104,7 @@ class DashboardServer {
       
       return { 
         success: true, 
-        message: 'Car added successfully! Restart the tracker to begin monitoring.',
+        message: 'Car added successfully! Click "Reload Config" below to begin monitoring immediately.',
         car: newCar 
       };
       
@@ -126,7 +130,7 @@ class DashboardServer {
       
       return { 
         success: true, 
-        message: `"${removedCar.name}" removed from monitoring. Restart tracker to apply changes.`,
+        message: `"${removedCar.name}" removed from monitoring. Click "Reload Config" below to apply immediately.`,
         car: removedCar
       };
       
@@ -152,13 +156,35 @@ class DashboardServer {
       const status = car.disabled ? 'paused' : 'resumed';
       return { 
         success: true, 
-        message: `"${car.name}" monitoring ${status}. Restart tracker to apply changes.`,
+        message: `"${car.name}" monitoring ${status}. Click 'Reload Config' to apply immediately.`,
         car: car
       };
       
     } catch (error) {
       console.error('Error toggling car:', error);
       return { success: false, message: 'Failed to toggle car: ' + error.message };
+    }
+  }
+
+  async reloadConfig() {
+    try {
+      const configPath = path.join(__dirname, 'config.json');
+      const newConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      
+      this.config = newConfig;
+      
+      console.log('🔄 Configuration reloaded from dashboard');
+      console.log(`📋 Now tracking ${newConfig.cars.length} car(s)`);
+      
+      return { 
+        success: true, 
+        message: `Configuration reloaded! Now tracking ${newConfig.cars.length} car(s). Changes will apply on next scheduled check.`,
+        carCount: newConfig.cars.length
+      };
+      
+    } catch (error) {
+      console.error('Error reloading config:', error);
+      return { success: false, message: 'Failed to reload config: ' + error.message };
     }
   }
 
@@ -546,6 +572,8 @@ class DashboardServer {
         .btn-pause:hover { background: #e0a800; }
         .btn-resume:hover { background: #218838; }
         .btn-delete:hover { background: #c82333; }
+        .btn-reload { background: #17a2b8; }
+        .btn-reload:hover { background: #138496; }
     </style>
 </head>
 <body>
@@ -602,7 +630,12 @@ class DashboardServer {
         </div>
         
         <div class="current-cars">
-            <h2>Currently Monitored Cars</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">Currently Monitored Cars</h2>
+                <button onclick="reloadConfig()" class="btn btn-reload" style="font-size: 14px; padding: 10px 20px;">
+                    🔄 Reload Config
+                </button>
+            </div>
             <div id="currentCars">Loading...</div>
         </div>
     </div>
@@ -724,6 +757,29 @@ class DashboardServer {
             }
         } catch (error) {
             document.getElementById('result').innerHTML = \`<div class="alert alert-error">Error: \${error.message}</div>\`;
+        }
+    }
+    
+    async function reloadConfig() {
+        const resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = '<div class="alert alert-success">Reloading configuration...</div>';
+        
+        try {
+            const response = await fetch('/api/reload-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                resultDiv.innerHTML = \`<div class="alert alert-success">\${result.message}</div>\`;
+                loadCurrentCars();
+            } else {
+                resultDiv.innerHTML = \`<div class="alert alert-error">\${result.message}</div>\`;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = \`<div class="alert alert-error">Error: \${error.message}</div>\`;
         }
     }
     
