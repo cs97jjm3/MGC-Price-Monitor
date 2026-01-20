@@ -79,7 +79,7 @@ class EmailNotifier {
     }
   }
 
-  async sendWeeklySummary(cars, priceHistory) {
+  async sendWeeklySummary(cars, priceHistory, persistentFailures = []) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 7);
     
@@ -151,6 +151,35 @@ class EmailNotifier {
     
     summaryHtml += `
         </div>
+    `;
+    
+    // Add persistent failures section
+    if (persistentFailures.length > 0) {
+      summaryHtml += `
+        <hr>
+        <div style="background-color: #fff3cd; padding: 15px; border-radius: 5px; margin-top: 20px;">
+          <h3 style="color: #856404;">⚠️ Items Needing Attention</h3>
+          <p><strong>${persistentFailures.length}</strong> item(s) haven't updated successfully in 7+ days:</p>
+      `;
+      
+      persistentFailures.forEach(failure => {
+        const daysSince = Math.floor((new Date() - new Date(failure.firstFailure)) / (1000 * 60 * 60 * 24));
+        summaryHtml += `
+          <div style="background-color: white; padding: 10px; margin: 10px 0; border-left: 3px solid #ffc107;">
+            <p style="margin: 5px 0;"><strong>${failure.name}</strong></p>
+            <p style="margin: 5px 0; font-size: 14px;">Failed for ${daysSince} days (${failure.failureCount} attempts)</p>
+            <p style="margin: 5px 0; font-size: 12px;"><a href="${failure.url}">Check if still available</a></p>
+          </div>
+        `;
+      });
+      
+      summaryHtml += `
+          <p style="margin-top: 15px;">💡 <strong>Suggestion:</strong> These items may be sold or removed. Check them and remove from tracking if needed.</p>
+        </div>
+      `;
+    }
+    
+    summaryHtml += `
         <p style="color: #6c757d; font-size: 12px; margin-top: 30px;">
           Generated: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' })}
         </p>
@@ -170,6 +199,78 @@ class EmailNotifier {
       return true;
     } catch (error) {
       console.error('❌ Error sending weekly summary:', error.message);
+      return false;
+    }
+  }
+
+  async sendImmediateFailureAlert(car, errorType, errorMessage) {
+    const errorExplanations = {
+      '404_NOT_FOUND': 'The page no longer exists. The car may have been sold or the listing removed.',
+      '403_FORBIDDEN': 'Access to the page was denied. The site may be blocking automated access.',
+      'PARSE_ERROR': 'The page structure has changed and the price cannot be extracted.',
+      'TIMEOUT': 'The website took too long to respond (3 attempts).',
+      'CONNECTION_REFUSED': 'Unable to connect to the website (3 attempts).',
+      '500_SERVER_ERROR': 'The website is experiencing server errors (3 attempts).',
+      'UNKNOWN_ERROR': 'An unknown error occurred (3 attempts).'
+    };
+
+    const explanation = errorExplanations[errorType] || errorMessage;
+    
+    const subject = `⚠️ MGC Alert: ${car.name} may no longer be available`;
+    
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <h2 style="color: #dc3545;">⚠️ Item Unavailable</h2>
+        
+        <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+          <h3 style="margin-top: 0;">${car.name}</h3>
+          <p><strong>Status:</strong> Failed to check price after 3 consecutive attempts</p>
+          <p><strong>Error:</strong> ${errorType}</p>
+        </div>
+        
+        <div style="background-color: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0;">
+          <h3>What this means:</h3>
+          <p>${explanation}</p>
+          
+          <h3>What to do:</h3>
+          <ul>
+            <li>Visit the listing to check if it's still available</li>
+            <li>If sold, you can remove it from your tracked items</li>
+            <li>If the site is down, it will retry automatically</li>
+          </ul>
+        </div>
+        
+        <p>
+          <a href="${car.url}" 
+             style="display: inline-block; background-color: #007bff; color: white; 
+                    padding: 12px 24px; text-decoration: none; border-radius: 5px; 
+                    font-weight: bold;">
+            Check Listing
+          </a>
+        </p>
+        
+        <p style="color: #6c757d; font-size: 12px; margin-top: 30px;">
+          URL: ${car.url}<br>
+          Time: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' })}
+        </p>
+      </div>
+    `;
+
+    const emailRecipients = car.recipients || this.config.email.recipients;
+    
+    const mailOptions = {
+      from: this.config.email.sender,
+      to: emailRecipients.join(', '),
+      subject: subject,
+      html: html
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ Immediate failure alert sent: ${info.messageId}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending immediate failure alert:', error.message);
       return false;
     }
   }

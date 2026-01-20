@@ -32,7 +32,10 @@ async function sendWeeklySummary() {
 
   console.log(`📈 Analyzing ${config.cars.length} car(s) for weekly changes...`);
   
-  const success = await emailNotifier.sendWeeklySummary(config.cars, priceHistory);
+  // Get cars with persistent failures
+  const persistentFailures = db.getCarsWithPersistentFailures(7);
+  
+  const success = await emailNotifier.sendWeeklySummary(config.cars, priceHistory, persistentFailures);
   
   if (success) {
     console.log('✅ Weekly summary sent successfully!');

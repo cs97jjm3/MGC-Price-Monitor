@@ -12,6 +12,8 @@ Automated car price monitoring tool that tracks multiple vehicle listings and se
 - **Price History**: SQLite database stores complete pricing history with timestamps
 - **Multi-Car Support**: Track unlimited vehicles from any dealer website
 - **No-Compile Installation**: Pure JavaScript - no Visual Studio or build tools required
+- **Robust Error Handling**: Automatic retries, failure tracking, and intelligent alerts
+- **Failure Notifications**: Immediate alerts for sold cars, daily and weekly failure summaries
 
 ## Quick Start
 
@@ -119,6 +121,66 @@ node test-email.js
 **Manual weekly summary:**
 ```bash
 node weekly-summary.js
+```
+
+## Error Handling & Failure Alerts
+
+### Automatic Retry Logic
+The tracker automatically handles temporary errors with exponential backoff:
+- **Attempt 1**: Fails → wait 2 seconds → retry
+- **Attempt 2**: Fails → wait 4 seconds → retry  
+- **Attempt 3**: Fails → log failure to database
+
+Permanent errors (404, 403) don't retry - immediate failure logged.
+
+### Failure Classification
+- **404 Not Found**: Car likely sold or listing removed
+- **403 Forbidden**: Site blocking automated access
+- **Parse Error**: Page structure changed, price undetectable
+- **Timeout/Connection**: Network issues (retries automatically)
+- **500 Server Error**: Dealer website down (retries automatically)
+
+### Immediate Alerts (3 Consecutive Failures)
+When a car fails 3 checks in a row, you get an immediate email:
+- Explains what the error means
+- Suggests next actions (check listing, remove if sold)
+- Includes direct link to listing
+
+### Daily Failure Summary (6pm)
+If enabled, receive a daily digest of:
+- All NEW failures that occurred today
+- Error types and affected cars
+- Number of failure attempts per car
+- **Only sent if failures exist** (no spam on good days)
+
+### Weekly Failure Summary (Sunday 6pm)
+Included in your regular weekly summary:
+- Cars that haven't updated in 7+ days
+- Total failure count and duration
+- Suggestion to check and remove sold items
+
+### Circuit Breaker (5+ Failures)
+After 5 consecutive failures:
+- Stops checking that car for 24 hours
+- Prevents hammering dead sites
+- Automatically resumes checking after wait period
+- Listed in weekly "Items Needing Attention" section
+
+### Configuration
+In `config.json`:
+```json
+{
+  "failureAlerts": {
+    "immediate": true,
+    "dailySummary": true,
+    "dailySummaryTime": "18:00",
+    "weeklySummary": true,
+    "circuitBreaker": {
+      "consecutiveFailures": 5,
+      "waitHours": 24
+    }
+  }
+}
 ```
 
 ## Email Features
@@ -297,4 +359,9 @@ James Murrell - Business Analyst specializing in practical automation solutions
 - ✅ Real-time web dashboard with price graphs
 - ✅ Web-based car management (add/delete/pause cars)
 - ✅ Individual car detail pages with complete history
+- ✅ Robust error handling with automatic retries
+- ✅ Immediate failure alerts (3 consecutive failures)
+- ✅ Daily and weekly failure summaries
+- ✅ Circuit breaker pattern (5+ failures)
+- ✅ Intelligent error classification and logging
 - ✅ Improved console output and logging

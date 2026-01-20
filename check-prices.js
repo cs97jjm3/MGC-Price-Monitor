@@ -47,6 +47,25 @@ async function checkPrices() {
 
     if (!currentDetails.success) {
       console.log(`   ❌ Failed to scrape: ${currentDetails.error || 'Unknown error'}`);
+      console.log(`   💾 Logging failure (${currentDetails.errorType})`);
+      
+      // Log the failure
+      db.logFailure(carId, currentDetails.errorType, currentDetails.error, currentDetails.htmlSnapshot);
+      
+      // Check consecutive failures
+      const consecutiveFailures = db.getConsecutiveFailures(carId);
+      console.log(`   📊 Consecutive failures: ${consecutiveFailures}`);
+      
+      // If 3 consecutive failures, send immediate alert
+      if (consecutiveFailures === 3) {
+        console.log('   ⚠️  3 consecutive failures - sending immediate alert...');
+        await emailNotifier.sendImmediateFailureAlert(
+          { ...car, id: carId },
+          currentDetails.errorType,
+          currentDetails.error
+        );
+      }
+      
       continue;
     }
 
@@ -54,6 +73,9 @@ async function checkPrices() {
       console.log('   ⚠️  Could not extract price from page');
       continue;
     }
+    
+    // Success - clear any old failures
+    db.clearOldFailures(carId);
 
     console.log(`   💰 Current price: £${currentDetails.price.toLocaleString()}`);
     if (currentDetails.mileage) {
@@ -111,6 +133,9 @@ async function checkPrices() {
 
     // Record current check
     db.addPriceCheck(carId, currentDetails.price, currentDetails.mileage, currentDetails.description);
+    
+    // Clear failures on successful check
+    db.clearOldFailures(carId);
   }
 
   db.close();

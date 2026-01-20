@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const checkPrices = require('./check-prices');
 const sendWeeklySummary = require('./weekly-summary');
+const sendDailyFailureSummary = require('./daily-failure-summary');
 const DashboardServer = require('./dashboard');
 
 console.log('🚗 MGC Car Tracker Starting...\n');
@@ -63,6 +64,21 @@ if (config.weeklyEmail?.enabled) {
   });
   
   console.log(`✅ Scheduled weekly summary for ${config.weeklyEmail.dayOfWeek}s at ${config.weeklyEmail.time}`);
+}
+
+// Schedule daily failure summary if enabled
+if (config.failureAlerts?.dailySummary) {
+  const dailyTime = config.failureAlerts.dailySummaryTime || '18:00';
+  const [hour, minute] = dailyTime.split(':');
+  const dailyCron = `${minute} ${hour} * * *`;
+  
+  cron.schedule(dailyCron, () => {
+    sendDailyFailureSummary();
+  }, {
+    timezone: config.schedule.timezone
+  });
+  
+  console.log(`✅ Scheduled daily failure summary for ${dailyTime}`);
 }
 
 console.log('\n' + '='.repeat(60));
