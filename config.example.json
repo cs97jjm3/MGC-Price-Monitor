@@ -1,0 +1,21 @@
+{
+  "email": {
+    "sender": "your-gmail@gmail.com",
+    "password": "your-gmail-app-password",
+    "recipients": [
+      "person1@email.com",
+      "person2@email.com",
+      "person3@email.com"
+    ]
+  },
+  "cars": [
+    {
+      "url": "https://www.dealer.com/cars/make/model/listing-id/",
+      "name": "Car Make Model Year Description"
+    }
+  ],
+  "schedule": {
+    "times": ["06:00", "12:00", "18:00", "19:00", "20:00", "21:00", "22:00"],
+    "timezone": "Europe/London"
+  }
+}

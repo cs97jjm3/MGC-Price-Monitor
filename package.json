@@ -1,0 +1,24 @@
+{
+  "name": "mgc-car-tracker",
+  "version": "1.0.0",
+  "description": "Car price monitoring tool",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "check": "node check-prices.js"
+  },
+  "keywords": [
+    "car",
+    "price",
+    "tracker"
+  ],
+  "author": "James Murrell",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.12",
+    "sql.js": "^1.10.3"
+  }
+}
