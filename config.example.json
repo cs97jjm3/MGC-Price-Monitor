@@ -1,21 +1,36 @@
 {
   "email": {
     "sender": "your-gmail@gmail.com",
-    "password": "your-gmail-app-password",
-    "recipients": [
-      "person1@email.com",
-      "person2@email.com",
-      "person3@email.com"
-    ]
+    "password": "your-gmail-app-password"
   },
   "cars": [
     {
       "url": "https://www.dealer.com/cars/make/model/listing-id/",
-      "name": "Car Make Model Year Description"
+      "name": "Car Make Model Year Description",
+      "recipients": ["person1@email.com", "person2@email.com"],
+      "thresholds": {
+        "minAmount": 100,
+        "minPercent": 5
+      }
+    },
+    {
+      "url": "https://www.dealer2.com/cars/another-car/",
+      "name": "Another Car Description", 
+      "recipients": ["person3@email.com"],
+      "thresholds": {
+        "minAmount": 50,
+        "minPercent": 3
+      }
     }
   ],
   "schedule": {
-    "times": ["06:00", "12:00", "18:00", "19:00", "20:00", "21:00", "22:00"],
+    "times": ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"],
     "timezone": "Europe/London"
+  },
+  "weeklyEmail": {
+    "enabled": true,
+    "dayOfWeek": "sunday",
+    "time": "18:00",
+    "recipients": ["person1@email.com"]
   }
 }

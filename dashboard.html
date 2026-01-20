@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MGC Car Tracker Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .car-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .car-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .current-price {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 10px;
+        }
+        .price-change {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+        }
+        .price-change.positive { color: #dc3545; }
+        .price-change.negative { color: #28a745; }
+        .price-change.neutral { color: #6c757d; }
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+        }
+        .car-url {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .car-url:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 MGC Car Tracker Dashboard</h1>
+            <p>Real-time car price monitoring and history</p>
+            <button class="refresh-btn" onclick="loadData()">🔄 Refresh Data</button>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+            <!-- Stats will be loaded here -->
+        </div>
+
+        <div id="car-list">
+            <div class="loading">Loading car data...</div>
+        </div>
+    </div>
+
+    <script>
+        let carData = [];
+        
+        async function loadData() {
+            try {
+                document.getElementById('car-list').innerHTML = '<div class="loading">Loading car data...</div>';
+                
+                const response = await fetch('/api/cars');
+                carData = await response.json();
+                
+                renderStats();
+                renderCars();
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('car-list').innerHTML = '<div class="loading">Error loading data. Is the server running?</div>';
+            }
+        }
+        
+        function renderStats() {
+            const totalCars = carData.length;
+            let totalValue = 0;
+            let recentChanges = 0;
+            let potentialSavings = 0;
+            
+            carData.forEach(car => {
+                if (car.currentPrice) {
+                    totalValue += car.currentPrice;
+                }
+                if (car.recentChange && car.recentChange !== 0) {
+                    recentChanges++;
+                    if (car.recentChange < 0) {
+                        potentialSavings += Math.abs(car.recentChange);
+                    }
+                }
+            });
+            
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${totalCars}</div>
+                    <div class="stat-label">Cars Tracked</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">£${totalValue.toLocaleString()}</div>
+                    <div class="stat-label">Total Value</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${recentChanges}</div>
+                    <div class="stat-label">Recent Changes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">£${Math.round(potentialSavings).toLocaleString()}</div>
+                    <div class="stat-label">Potential Savings</div>
+                </div>
+            `;
+        }
+        
+        function renderCars() {
+            const carListHtml = carData.map(car => `
+                <div class="car-card">
+                    <div class="car-title">${car.name}</div>
+                    <div class="current-price">£${car.currentPrice ? car.currentPrice.toLocaleString() : 'N/A'}</div>
+                    ${car.recentChange ? `
+                        <div class="price-change ${car.recentChange < 0 ? 'negative' : car.recentChange > 0 ? 'positive' : 'neutral'}">
+                            ${car.recentChange < 0 ? '📉' : car.recentChange > 0 ? '📈' : '➡️'} 
+                            ${car.recentChange === 0 ? 'No change' : 
+                              (car.recentChange < 0 ? '-' : '+') + '£' + Math.abs(car.recentChange).toLocaleString()
+                            }
+                            ${car.lastCheck ? ' (since ' + new Date(car.lastCheck).toLocaleDateString('en-GB') + ')' : ''}
+                        </div>
+                    ` : ''}
+                    <div class="chart-container">
+                        <canvas id="chart-${car.id}"></canvas>
+                    </div>
+                    <a href="${car.url}" target="_blank" class="car-url">View Listing →</a>
+                </div>
+            `).join('');
+            
+            document.getElementById('car-list').innerHTML = carListHtml;
+            
+            // Render charts
+            carData.forEach(car => {
+                if (car.history && car.history.length > 0) {
+                    renderChart(car);
+                }
+            });
+        }
+        
+        function renderChart(car) {
+            const ctx = document.getElementById(`chart-${car.id}`);
+            if (!ctx) return;
+            
+            const labels = car.history.map(h => new Date(h.checked_at).toLocaleDateString('en-GB'));
+            const prices = car.history.map(h => h.price);
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels.reverse(),
+                    datasets: [{
+                        label: 'Price (£)',
+                        data: prices.reverse(),
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0,123,255,0.1)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return '£' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Load data when page loads
+        window.addEventListener('DOMContentLoaded', loadData);
+        
+        // Auto-refresh every 5 minutes
+        setInterval(loadData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

@@ -27,6 +27,12 @@ async function checkPrices() {
 
   // Check each car
   for (const car of config.cars) {
+    // Skip disabled cars
+    if (car.disabled) {
+      console.log(`\n📊 Skipping: ${car.name} (PAUSED)`);
+      continue;
+    }
+    
     console.log(`\n📊 Checking: ${car.name}`);
     console.log(`   URL: ${car.url}`);
 
@@ -66,16 +72,35 @@ async function checkPrices() {
         const changeSymbol = change < 0 ? '📉' : '📈';
         console.log(`   ${changeSymbol} PRICE CHANGE: ${change < 0 ? '-' : '+'}£${Math.abs(change).toLocaleString()}`);
         
-        // Send email alert
-        console.log('   📧 Sending email alert...');
-        const emailSent = await emailNotifier.sendPriceChangeAlert(
-          { ...currentDetails, name: car.name },
-          lastCheck.price,
-          currentDetails.price
-        );
+        // Check if change meets threshold criteria
+        let shouldAlert = true;
+        if (car.thresholds && change < 0) { // Only apply thresholds to price drops
+          const amountChange = Math.abs(change);
+          const percentChange = (Math.abs(change) / lastCheck.price) * 100;
+          
+          const meetsAmountThreshold = amountChange >= (car.thresholds.minAmount || 0);
+          const meetsPercentThreshold = percentChange >= (car.thresholds.minPercent || 0);
+          
+          shouldAlert = meetsAmountThreshold || meetsPercentThreshold;
+          
+          if (!shouldAlert) {
+            console.log(`   ⏸️  Below threshold - not alerting (need £${car.thresholds.minAmount}+ or ${car.thresholds.minPercent}%+)`);
+          }
+        }
         
-        if (emailSent) {
-          priceChanges++;
+        if (shouldAlert) {
+          // Send email alert
+          console.log('   📧 Sending email alert...');
+          const emailSent = await emailNotifier.sendPriceChangeAlert(
+            { ...currentDetails, name: car.name },
+            lastCheck.price,
+            currentDetails.price,
+            car.recipients // Pass car-specific recipients
+          );
+          
+          if (emailSent) {
+            priceChanges++;
+          }
         }
       } else {
         console.log('   ✅ No price change');

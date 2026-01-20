@@ -12,7 +12,7 @@ class EmailNotifier {
     });
   }
 
-  async sendPriceChangeAlert(carDetails, oldPrice, newPrice) {
+  async sendPriceChangeAlert(carDetails, oldPrice, newPrice, recipients = null) {
     const priceChange = newPrice - oldPrice;
     const changeType = priceChange < 0 ? 'DROPPED' : 'INCREASED';
     const changeSymbol = priceChange < 0 ? '📉' : '📈';
@@ -59,9 +59,12 @@ class EmailNotifier {
       </div>
     `;
 
+    // Use car-specific recipients or fall back to global recipients
+    const emailRecipients = recipients || this.config.email.recipients;
+    
     const mailOptions = {
       from: this.config.email.sender,
-      to: this.config.email.recipients.join(', '),
+      to: emailRecipients.join(', '),
       subject: subject,
       html: html
     };
@@ -76,10 +79,108 @@ class EmailNotifier {
     }
   }
 
-  async sendTestEmail() {
+  async sendWeeklySummary(cars, priceHistory) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+    
+    let summaryHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 800px;">
+        <h2 style="color: #007bff;">Weekly Car Price Summary</h2>
+        <p><strong>Week ending:</strong> ${new Date().toLocaleDateString('en-GB')}</p>
+        <hr>
+    `;
+    
+    let totalChanges = 0;
+    let biggestDrop = { amount: 0, car: null };
+    let biggestIncrease = { amount: 0, car: null };
+    
+    for (const car of cars) {
+      const history = priceHistory[car.url] || [];
+      if (history.length < 2) continue;
+      
+      const currentPrice = history[0].price;
+      const weekAgoPrice = history.find(h => new Date(h.checked_at) <= startDate)?.price || currentPrice;
+      const change = currentPrice - weekAgoPrice;
+      
+      if (change !== 0) {
+        totalChanges++;
+        if (change < 0 && Math.abs(change) > biggestDrop.amount) {
+          biggestDrop = { amount: Math.abs(change), car: car.name, price: currentPrice };
+        }
+        if (change > 0 && change > biggestIncrease.amount) {
+          biggestIncrease = { amount: change, car: car.name, price: currentPrice };
+        }
+      }
+      
+      const changeSymbol = change < 0 ? '📉' : change > 0 ? '📈' : '➡️';
+      const changeText = change === 0 ? 'No change' : `${change < 0 ? '-' : '+'}£${Math.abs(change).toLocaleString()}`;
+      
+      summaryHtml += `
+        <div style="background-color: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px;">
+          <h3 style="margin: 0 0 10px 0;">${car.name}</h3>
+          <p style="margin: 5px 0;"><strong>Current price:</strong> £${currentPrice.toLocaleString()}</p>
+          <p style="margin: 5px 0; color: ${change < 0 ? '#28a745' : change > 0 ? '#dc3545' : '#6c757d'}">
+            <strong>Week change:</strong> ${changeSymbol} ${changeText}
+          </p>
+          <p style="font-size: 12px; color: #6c757d; margin: 5px 0;">
+            <a href="${car.url}">View listing</a>
+          </p>
+        </div>
+      `;
+    }
+    
+    // Summary stats
+    summaryHtml += `
+      <hr>
+      <div style="background-color: #e9ecef; padding: 15px; border-radius: 5px;">
+        <h3>This Week's Summary</h3>
+        <p>• <strong>${totalChanges}</strong> car(s) changed price</p>
+    `;
+    
+    if (biggestDrop.car) {
+      summaryHtml += `<p>• 📉 <strong>Biggest drop:</strong> ${biggestDrop.car} (-£${biggestDrop.amount.toLocaleString()})</p>`;
+    }
+    
+    if (biggestIncrease.car) {
+      summaryHtml += `<p>• 📈 <strong>Biggest increase:</strong> ${biggestIncrease.car} (+£${biggestIncrease.amount.toLocaleString()})</p>`;
+    }
+    
+    if (totalChanges === 0) {
+      summaryHtml += `<p>• 🔄 All tracked cars maintained their prices</p>`;
+    }
+    
+    summaryHtml += `
+        </div>
+        <p style="color: #6c757d; font-size: 12px; margin-top: 30px;">
+          Generated: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' })}
+        </p>
+      </div>
+    `;
+    
     const mailOptions = {
       from: this.config.email.sender,
-      to: this.config.email.recipients.join(', '),
+      to: this.config.weeklyEmail?.recipients?.join(', ') || this.config.email.recipients?.join(', '),
+      subject: `📈 Weekly Car Price Summary - ${totalChanges} change(s)`,
+      html: summaryHtml
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ Weekly summary sent: ${info.messageId}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending weekly summary:', error.message);
+      return false;
+    }
+  }
+
+  async sendTestEmail(recipients = null) {
+    // Use provided recipients or fall back to global recipients
+    const emailRecipients = recipients || this.config.email.recipients;
+    
+    const mailOptions = {
+      from: this.config.email.sender,
+      to: emailRecipients.join(', '),
       subject: '🚗 MGC Car Tracker - Test Email',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
