@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Price Database Manager
 const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');

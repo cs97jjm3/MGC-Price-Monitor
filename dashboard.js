@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Web Dashboard Server
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

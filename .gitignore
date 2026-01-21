@@ -1,19 +1,30 @@
-node_modules/
-car-prices.db
-*.log
-.env
-.DS_Store
+# MGC Price Monitor v2.0 - Git Ignore Rules
 
-# Sensitive configuration - create config.example.json instead
+# Node dependencies
+node_modules/
+
+# Database files (both old and new)
+item-prices.db
+car-prices.db
+
+# Log files
+*.log
+
+# Environment variables
+.env
+
+# Sensitive configuration
 config.json
 
-# Test files with real data
+# Test files (contain real credentials)
 test-email.js
 test-price-change.js
 
-# Any backup files
+# Backup files
 *.bak
 *.backup
+*-new.js
+*-new.json
 
 # IDE files
 .vscode/

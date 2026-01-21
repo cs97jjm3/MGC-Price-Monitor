@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Email Notification System
 const nodemailer = require('nodemailer');
 
 class EmailNotifier {
@@ -59,7 +60,7 @@ class EmailNotifier {
       </div>
     `;
 
-    // Use car-specific recipients or fall back to global recipients
+    // Use item-specific recipients or fall back to global recipients
     const emailRecipients = recipients || this.config.email.recipients;
     
     const mailOptions = {
@@ -79,7 +80,7 @@ class EmailNotifier {
     }
   }
 
-  async sendWeeklySummary(cars, priceHistory, persistentFailures = []) {
+  async sendWeeklySummary(items, priceHistory, persistentFailures = []) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 7);
     
@@ -91,11 +92,11 @@ class EmailNotifier {
     `;
     
     let totalChanges = 0;
-    let biggestDrop = { amount: 0, car: null };
-    let biggestIncrease = { amount: 0, car: null };
+    let biggestDrop = { amount: 0, item: null };
+    let biggestIncrease = { amount: 0, item: null };
     
-    for (const car of cars) {
-      const history = priceHistory[car.url] || [];
+    for (const item of items) {
+      const history = priceHistory[item.url] || [];
       if (history.length < 2) continue;
       
       const currentPrice = history[0].price;
@@ -105,10 +106,10 @@ class EmailNotifier {
       if (change !== 0) {
         totalChanges++;
         if (change < 0 && Math.abs(change) > biggestDrop.amount) {
-          biggestDrop = { amount: Math.abs(change), car: car.name, price: currentPrice };
+          biggestDrop = { amount: Math.abs(change), item: item.name, price: currentPrice };
         }
         if (change > 0 && change > biggestIncrease.amount) {
-          biggestIncrease = { amount: change, car: car.name, price: currentPrice };
+          biggestIncrease = { amount: change, item: item.name, price: currentPrice };
         }
       }
       
@@ -117,13 +118,13 @@ class EmailNotifier {
       
       summaryHtml += `
         <div style="background-color: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px;">
-          <h3 style="margin: 0 0 10px 0;">${car.name}</h3>
+          <h3 style="margin: 0 0 10px 0;">${item.name}</h3>
           <p style="margin: 5px 0;"><strong>Current price:</strong> £${currentPrice.toLocaleString()}</p>
           <p style="margin: 5px 0; color: ${change < 0 ? '#28a745' : change > 0 ? '#dc3545' : '#6c757d'}">
             <strong>Week change:</strong> ${changeSymbol} ${changeText}
           </p>
           <p style="font-size: 12px; color: #6c757d; margin: 5px 0;">
-            <a href="${car.url}">View listing</a>
+            <a href="${item.url}">View listing</a>
           </p>
         </div>
       `;
@@ -137,12 +138,12 @@ class EmailNotifier {
         <p>• <strong>${totalChanges}</strong> item(s) changed price</p>
     `;
     
-    if (biggestDrop.car) {
-      summaryHtml += `<p>• 📉 <strong>Biggest drop:</strong> ${biggestDrop.car} (-£${biggestDrop.amount.toLocaleString()})</p>`;
+    if (biggestDrop.item) {
+      summaryHtml += `<p>• 📉 <strong>Biggest drop:</strong> ${biggestDrop.item} (-£${biggestDrop.amount.toLocaleString()})</p>`;
     }
     
-    if (biggestIncrease.car) {
-      summaryHtml += `<p>• 📈 <strong>Biggest increase:</strong> ${biggestIncrease.car} (+£${biggestIncrease.amount.toLocaleString()})</p>`;
+    if (biggestIncrease.item) {
+      summaryHtml += `<p>• 📈 <strong>Biggest increase:</strong> ${biggestIncrease.item} (+£${biggestIncrease.amount.toLocaleString()})</p>`;
     }
     
     if (totalChanges === 0) {
@@ -203,9 +204,9 @@ class EmailNotifier {
     }
   }
 
-  async sendImmediateFailureAlert(car, errorType, errorMessage) {
+  async sendImmediateFailureAlert(item, errorType, errorMessage) {
     const errorExplanations = {
-      '404_NOT_FOUND': 'The page no longer exists. The car may have been sold or the listing removed.',
+      '404_NOT_FOUND': 'The page no longer exists. The item may have been sold or the listing removed.',
       '403_FORBIDDEN': 'Access to the page was denied. The site may be blocking automated access.',
       'PARSE_ERROR': 'The page structure has changed and the price cannot be extracted.',
       'TIMEOUT': 'The website took too long to respond (3 attempts).',
@@ -216,14 +217,14 @@ class EmailNotifier {
 
     const explanation = errorExplanations[errorType] || errorMessage;
     
-    const subject = `⚠️ MGC Alert: ${car.name} may no longer be available`;
+    const subject = `⚠️ MGC Alert: ${item.name} may no longer be available`;
     
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px;">
         <h2 style="color: #dc3545;">⚠️ Item Unavailable</h2>
         
         <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
-          <h3 style="margin-top: 0;">${car.name}</h3>
+          <h3 style="margin-top: 0;">${item.name}</h3>
           <p><strong>Status:</strong> Failed to check price after 3 consecutive attempts</p>
           <p><strong>Error:</strong> ${errorType}</p>
         </div>
@@ -241,7 +242,7 @@ class EmailNotifier {
         </div>
         
         <p>
-          <a href="${car.url}" 
+          <a href="${item.url}" 
              style="display: inline-block; background-color: #007bff; color: white; 
                     padding: 12px 24px; text-decoration: none; border-radius: 5px; 
                     font-weight: bold;">
@@ -250,13 +251,13 @@ class EmailNotifier {
         </p>
         
         <p style="color: #6c757d; font-size: 12px; margin-top: 30px;">
-          URL: ${car.url}<br>
+          URL: ${item.url}<br>
           Time: ${new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' })}
         </p>
       </div>
     `;
 
-    const emailRecipients = car.recipients || this.config.email.recipients;
+    const emailRecipients = item.recipients || this.config.email.recipients;
     
     const mailOptions = {
       from: this.config.email.sender,

@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Price Checker
 const fs = require('fs');
 const path = require('path');
 const PriceDatabase = require('./database');

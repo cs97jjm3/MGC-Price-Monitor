@@ -1,12 +1,14 @@
 {
   "email": {
     "sender": "your-gmail@gmail.com",
-    "password": "your-gmail-app-password"
+    "password": "your-gmail-app-password",
+    "recipients": ["recipient1@email.com", "recipient2@email.com"]
   },
-  "cars": [
+  "items": [
     {
-      "url": "https://www.dealer.com/cars/make/model/listing-id/",
-      "name": "Car Make Model Year Description",
+      "url": "https://www.dealer.com/items/product-url/",
+      "name": "VW Golf 2019 Blue",
+      "category": "Cars",
       "recipients": ["person1@email.com", "person2@email.com"],
       "thresholds": {
         "minAmount": 100,
@@ -14,13 +16,19 @@
       }
     },
     {
-      "url": "https://www.dealer2.com/cars/another-car/",
-      "name": "Another Car Description", 
+      "url": "https://www.lego.com/en-gb/product/death-star-75419",
+      "name": "Lego Death Star",
+      "category": "Toys",
       "recipients": ["person3@email.com"],
       "thresholds": {
         "minAmount": 50,
-        "minPercent": 3
+        "minPercent": 10
       }
+    },
+    {
+      "url": "https://www.example.com/furniture/garden-set",
+      "name": "Garden Furniture Set",
+      "category": "Garden"
     }
   ],
   "schedule": {

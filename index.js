@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Main Entry Point
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');

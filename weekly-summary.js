@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Weekly Summary Reporter
 const fs = require('fs');
 const path = require('path');
 const PriceDatabase = require('./database');

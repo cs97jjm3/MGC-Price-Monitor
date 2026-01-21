@@ -1,3 +1,4 @@
+// MGC Price Monitor v2.0 - Universal Item Scraper
 const axios = require('axios');
 const cheerio = require('cheerio');
 
