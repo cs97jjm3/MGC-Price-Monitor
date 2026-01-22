@@ -35,3 +35,4 @@ test-price-change.js
 # OS files
 Thumbs.db
 .DS_Store
+item-prices.db

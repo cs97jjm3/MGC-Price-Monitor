@@ -362,7 +362,10 @@ class DashboardServer {
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels: priceData.map(h => new Date(h.date).toLocaleDateString('en-GB')),
+            labels: priceData.map(h => {
+                const d = new Date(h.date);
+                return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            }),
             datasets: [{
                 label: 'Price (£)',
                 data: priceData.map(h => h.price),
