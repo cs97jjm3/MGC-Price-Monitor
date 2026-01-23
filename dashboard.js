@@ -49,10 +49,21 @@ class DashboardServer {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result));
         });
+      } else if (req.url === '/api/edit-item' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk.toString());
+        req.on('end', async () => {
+          const result = await this.editItem(JSON.parse(body));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        });
       } else if (req.url === '/api/reload-config' && req.method === 'POST') {
         const result = await this.reloadConfig();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
+      } else if (req.url === '/logo.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end(fs.readFileSync(path.join(__dirname, 'logo.png')));
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -168,6 +179,73 @@ class DashboardServer {
     }
   }
 
+  async editItem(itemData) {
+    try {
+      if (!itemData.originalUrl || !itemData.url || !itemData.name) {
+        return { success: false, message: 'Original URL, URL and name are required' };
+      }
+
+      const configPath = path.join(__dirname, 'config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      
+      const itemIndex = config.items.findIndex(item => item.url === itemData.originalUrl);
+      if (itemIndex === -1) {
+        return { success: false, message: 'Item not found' };
+      }
+      
+      // Check if new URL already exists (and it's not the same item)
+      if (itemData.url !== itemData.originalUrl) {
+        const existingItem = config.items.find(item => item.url === itemData.url);
+        if (existingItem) {
+          return { success: false, message: 'This URL is already being tracked by another item!' };
+        }
+      }
+      
+      const recipients = itemData.recipients 
+        ? itemData.recipients.split(',').map(email => email.trim()).filter(email => email.length > 0)
+        : config.email.recipients;
+      
+      const updatedItem = {
+        url: itemData.url.trim(),
+        name: itemData.name.trim(),
+        category: itemData.category || 'General',
+        recipients: recipients,
+        disabled: config.items[itemIndex].disabled || false
+      };
+      
+      if (itemData.minAmount || itemData.minPercent) {
+        updatedItem.thresholds = {
+          minAmount: parseInt(itemData.minAmount) || 100,
+          minPercent: parseInt(itemData.minPercent) || 5
+        };
+      }
+      
+      config.items[itemIndex] = updatedItem;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      
+      // Update database if URL changed
+      if (itemData.url !== itemData.originalUrl) {
+        const db = new PriceDatabase();
+        await db.initialize();
+        const itemId = db.getItemId(itemData.originalUrl);
+        if (itemId) {
+          db.updateItemUrl(itemId, updatedItem.url, updatedItem.name, updatedItem.category);
+        }
+        db.close();
+      }
+      
+      return { 
+        success: true, 
+        message: 'Item updated successfully! Click "Reload Config" below to apply immediately.',
+        item: updatedItem 
+      };
+      
+    } catch (error) {
+      console.error('Error editing item:', error);
+      return { success: false, message: 'Failed to edit item: ' + error.message };
+    }
+  }
+
   async reloadConfig() {
     try {
       const configPath = path.join(__dirname, 'config.json');
@@ -253,7 +331,8 @@ class DashboardServer {
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }
         .container { max-width: 1000px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #007bff; margin-bottom: 10px; }
+        .header h1 { color: #007bff; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .header img { height: 50px; width: auto; }
         .nav { text-align: center; margin-bottom: 30px; }
         .nav a { display: inline-block; margin: 0 15px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
         .nav a:hover { background: #0056b3; }
@@ -277,7 +356,7 @@ class DashboardServer {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏷️ ${item.name}</h1>
+            <h1><img src="/logo.png" alt="MGC Logo">🏷️ ${item.name}</h1>
             <p>${item.category} - Detailed price monitoring</p>
         </div>
         
@@ -326,7 +405,10 @@ class DashboardServer {
             </div>
             
             <div class="info-card">
-                <h3>Recent Price History</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>Recent Price History</h3>
+                    <button onclick="downloadCSV()" style="padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">📥 Download CSV</button>
+                </div>
                 <table class="history-table">
                     <thead>
                         <tr>
@@ -343,7 +425,7 @@ class DashboardServer {
                             const changeColor = change < 0 ? '#dc3545' : change > 0 ? '#28a745' : '#6c757d';
                             return `
                                 <tr>
-                                    <td>${new Date(entry.date).toLocaleDateString('en-GB')}</td>
+                                    <td>${new Date(entry.date).toLocaleDateString('en-GB')} ${new Date(entry.date).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'})}</td>
                                     <td>£${entry.price.toLocaleString()}</td>
                                     <td style="color: ${changeColor}">${changeText}</td>
                                 </tr>
@@ -352,6 +434,124 @@ class DashboardServer {
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- Edit Item Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Item</h2>
+                <span class="modal-close" onclick="closeEditModal()">&times;</span>
+            </div>
+            <form id="editItemForm">
+                <input type="hidden" id="editOriginalUrl" name="originalUrl">
+                
+                <div class="form-group">
+                    <label for="editItemName">Item Name/Description</label>
+                    <input type="text" id="editItemName" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editCategory">Category</label>
+                    <select id="editCategory" name="category" required>
+                        <option value="Cars">Cars</option>
+                        <option value="Furniture">Furniture</option>
+                        <option value="Kitchen">Kitchen</option>
+                        <option value="Toys">Toys</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Garden">Garden</option>
+                        <option value="Clothing">Clothing</option>
+                        <option value="Sports">Sports</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editItemUrl">Item Listing URL</label>
+                    <textarea id="editItemUrl" name="url" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editRecipients">Email Recipients</label>
+                    <input type="text" id="editRecipients" name="recipients" placeholder="email1@domain.com, email2@domain.com">
+                    <small>Comma-separated email addresses</small>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editMinAmount">Min Amount Threshold (£)</label>
+                        <input type="number" id="editMinAmount" name="minAmount" placeholder="100">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editMinPercent">Min Percent Threshold (%)</label>
+                        <input type="number" id="editMinPercent" name="minPercent" placeholder="5">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn" id="editSubmitBtn">Update Item</button>
+            </form>
+            
+            <div id="editResult"></div>
+        </div>
+    </div>
+
+    <!-- Edit Item Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Item</h2>
+                <span class="modal-close" onclick="closeEditModal()">&times;</span>
+            </div>
+            <form id="editItemForm">
+                <input type="hidden" id="editOriginalUrl" name="originalUrl">
+                
+                <div class="form-group">
+                    <label for="editItemName">Item Name/Description</label>
+                    <input type="text" id="editItemName" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editCategory">Category</label>
+                    <select id="editCategory" name="category" required>
+                        <option value="Cars">Cars</option>
+                        <option value="Furniture">Furniture</option>
+                        <option value="Kitchen">Kitchen</option>
+                        <option value="Toys">Toys</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Garden">Garden</option>
+                        <option value="Clothing">Clothing</option>
+                        <option value="Sports">Sports</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editItemUrl">Item Listing URL</label>
+                    <textarea id="editItemUrl" name="url" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editRecipients">Email Recipients</label>
+                    <input type="text" id="editRecipients" name="recipients" placeholder="email1@domain.com, email2@domain.com">
+                    <small>Comma-separated email addresses</small>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editMinAmount">Min Amount Threshold (£)</label>
+                        <input type="number" id="editMinAmount" name="minAmount" placeholder="100">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editMinPercent">Min Percent Threshold (%)</label>
+                        <input type="number" id="editMinPercent" name="minPercent" placeholder="5">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn" id="editSubmitBtn">Update Item</button>
+            </form>
+            
+            <div id="editResult"></div>
         </div>
     </div>
 
@@ -413,6 +613,38 @@ class DashboardServer {
         }
     });
     </script>
+    
+    <script>
+    function downloadCSV() {
+        const priceData = ${JSON.stringify(item.priceHistory)};
+        
+        // Create CSV content
+        let csv = 'Date,Time,Price (£),Change (£)\\n';
+        
+        priceData.forEach((entry, index) => {
+            const d = new Date(entry.date);
+            const date = d.toLocaleDateString('en-GB');
+            const time = d.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+            const price = entry.price;
+            
+            const nextEntry = priceData[index + 1];
+            const change = nextEntry ? (entry.price - nextEntry.price).toFixed(2) : '0.00';
+            
+            csv += '"' + date + '","' + time + '",' + price + ',' + change + '\\n';
+        });
+        
+        // Create download
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '${item.name.replace(/[^a-z0-9]/gi, '_')}_price_history.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+    </script>
 </body>
 </html>`;
   }
@@ -428,7 +660,8 @@ class DashboardServer {
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }
         .container { max-width: 1200px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #007bff; margin-bottom: 10px; }
+        .header h1 { color: #007bff; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .header img { height: 50px; width: auto; }
         .nav { text-align: center; margin-bottom: 30px; }
         .nav a { display: inline-block; margin: 0 15px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
         .nav a:hover { background: #0056b3; }
@@ -455,7 +688,7 @@ class DashboardServer {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏷️ MGC Price Monitor Dashboard</h1>
+            <h1><img src="/logo.png" alt="MGC Logo">🏷️ MGC Price Monitor Dashboard</h1>
             <p>Real-time price monitoring across all categories</p>
         </div>
         
@@ -549,7 +782,8 @@ class DashboardServer {
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f8f9fa; }
         .container { max-width: 800px; margin: 0 auto; }
         .header { text-align: center; margin-bottom: 30px; }
-        .header h1 { color: #007bff; margin-bottom: 10px; }
+        .header h1 { color: #007bff; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 15px; }
+        .header img { height: 50px; width: auto; }
         .nav { text-align: center; margin-bottom: 30px; }
         .nav a { display: inline-block; margin: 0 15px; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
         .nav a:hover { background: #0056b3; }
@@ -580,15 +814,22 @@ class DashboardServer {
         .btn-pause:hover { background: #e0a800; }
         .btn-resume:hover { background: #218838; }
         .btn-delete:hover { background: #c82333; }
+        .btn-edit { background: #007bff; color: white; }
+        .btn-edit:hover { background: #0056b3; }
         .btn-reload { background: #17a2b8; color: white; }
         .btn-reload:hover { background: #138496; }
         .category-badge { display: inline-block; padding: 4px 8px; background: #17a2b8; color: white; border-radius: 3px; font-size: 11px; margin-left: 10px; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: white; margin: 5% auto; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-close { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .modal-close:hover { color: #000; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏷️ MGC Price Monitor - Manage Items</h1>
+            <h1><img src="/logo.png" alt="MGC Logo">🏷️ MGC Price Monitor - Manage Items</h1>
             <p>Add new items to monitor and configure alert settings</p>
         </div>
         
@@ -663,6 +904,65 @@ class DashboardServer {
         </div>
     </div>
 
+    <!-- Edit Item Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Item</h2>
+                <span class="modal-close" onclick="closeEditModal()">&times;</span>
+            </div>
+            <form id="editItemForm">
+                <input type="hidden" id="editOriginalUrl" name="originalUrl">
+                
+                <div class="form-group">
+                    <label for="editItemName">Item Name/Description</label>
+                    <input type="text" id="editItemName" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editCategory">Category</label>
+                    <select id="editCategory" name="category" required>
+                        <option value="Cars">Cars</option>
+                        <option value="Furniture">Furniture</option>
+                        <option value="Kitchen">Kitchen</option>
+                        <option value="Toys">Toys</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Garden">Garden</option>
+                        <option value="Clothing">Clothing</option>
+                        <option value="Sports">Sports</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editItemUrl">Item Listing URL</label>
+                    <textarea id="editItemUrl" name="url" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editRecipients">Email Recipients</label>
+                    <input type="text" id="editRecipients" name="recipients" placeholder="email1@domain.com, email2@domain.com">
+                    <small>Comma-separated email addresses</small>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editMinAmount">Min Amount Threshold (£)</label>
+                        <input type="number" id="editMinAmount" name="minAmount" placeholder="100">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editMinPercent">Min Percent Threshold (%)</label>
+                        <input type="number" id="editMinPercent" name="minPercent" placeholder="5">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn" id="editSubmitBtn">Update Item</button>
+            </form>
+            
+            <div id="editResult"></div>
+        </div>
+    </div>
+
     <script>
     document.getElementById('addItemForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -720,6 +1020,9 @@ class DashboardServer {
                     \${item.thresholds ? \`<p><strong>Thresholds:</strong> £\${item.thresholds.minAmount}+ or \${item.thresholds.minPercent}%+</p>\` : ''}
                     <small><a href="\${item.url}" target="_blank">View Listing</a></small>
                     <div class="item-actions">
+                        <button class="btn-edit" onclick="editItem('\${item.url}', '\${item.name}', '\${item.category}', '\${item.recipients.join(',')}', \${item.thresholds ? item.thresholds.minAmount : 'null'}, \${item.thresholds ? item.thresholds.minPercent : 'null'})">
+                            ✏️ Edit
+                        </button>
                         <button class="\${item.disabled ? 'btn-resume' : 'btn-pause'}" onclick="toggleItem('\${item.url}')">
                             \${item.disabled ? '▶️ Resume' : '⏸️ Pause'}
                         </button>
@@ -805,6 +1108,69 @@ class DashboardServer {
             resultDiv.innerHTML = \`<div class="alert alert-error">Error: \${error.message}</div>\`;
         }
     }
+    
+    function editItem(url, name, category, recipients, minAmount, minPercent) {
+        document.getElementById('editOriginalUrl').value = url;
+        document.getElementById('editItemName').value = name;
+        document.getElementById('editCategory').value = category;
+        document.getElementById('editItemUrl').value = url;
+        document.getElementById('editRecipients').value = recipients;
+        document.getElementById('editMinAmount').value = minAmount || '';
+        document.getElementById('editMinPercent').value = minPercent || '';
+        
+        document.getElementById('editModal').style.display = 'block';
+    }
+    
+    function closeEditModal() {
+        document.getElementById('editModal').style.display = 'none';
+        document.getElementById('editResult').innerHTML = '';
+    }
+    
+    window.onclick = function(event) {
+        const modal = document.getElementById('editModal');
+        if (event.target == modal) {
+            closeEditModal();
+        }
+    }
+    
+    document.getElementById('editItemForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('editSubmitBtn');
+        const resultDiv = document.getElementById('editResult');
+        
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Updating Item...';
+        
+        const formData = new FormData(e.target);
+        const itemData = Object.fromEntries(formData.entries());
+        
+        try {
+            const response = await fetch('/api/edit-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(itemData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                resultDiv.innerHTML = \`<div class="alert alert-success">\${result.message}</div>\`;
+                setTimeout(() => {
+                    closeEditModal();
+                    loadCurrentItems();
+                    document.getElementById('result').innerHTML = \`<div class="alert alert-success">\${result.message}</div>\`;
+                }, 1500);
+            } else {
+                resultDiv.innerHTML = \`<div class="alert alert-error">\${result.message}</div>\`;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = \`<div class="alert alert-error">Error: \${error.message}</div>\`;
+        }
+        
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Update Item';
+    });
     
     loadCurrentItems();
     </script>

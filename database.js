@@ -81,6 +81,15 @@ class PriceDatabase {
     }
   }
 
+  updateItemUrl(itemId, newUrl, newName, newCategory) {
+    try {
+      this.db.run('UPDATE items SET url = ?, name = ?, category = ? WHERE id = ?', [newUrl, newName, newCategory, itemId]);
+      this.save();
+    } catch (error) {
+      console.error('Error updating item:', error);
+    }
+  }
+
   getItemId(url) {
     const result = this.db.exec('SELECT id FROM items WHERE url = ?', [url]);
     if (result.length > 0 && result[0].values.length > 0) {
